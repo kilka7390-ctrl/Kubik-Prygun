@@ -21,28 +21,14 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Настроить Android SDK и принять лицензии
+      - name: Установить Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Принять лицензии и установить компоненты
         shell: bash
         run: |
-          SDKMANAGER=$(find /usr/local/lib/android /opt/android-sdk -name sdkmanager -type f 2>/dev/null | head -n 1)
-
-          if [ -z "$SDKMANAGER" ]; then
-            echo "ОШИБКА: sdkmanager не найден"
-            exit 1
-          fi
-
-          SDK_ROOT="$(dirname "$(dirname "$(dirname "$(dirname "$SDKMANAGER")")")")"
-
-          echo "SDK Manager: $SDKMANAGER"
-          echo "SDK Root: $SDK_ROOT"
-
-          echo "ANDROID_HOME=$SDK_ROOT" >> "$GITHUB_ENV"
-          echo "ANDROID_SDK_ROOT=$SDK_ROOT" >> "$GITHUB_ENV"
-          echo "$SDK_ROOT/platform-tools" >> "$GITHUB_PATH"
-
-          yes | "$SDKMANAGER" --sdk_root="$SDK_ROOT" --licenses
-
-          "$SDKMANAGER" --sdk_root="$SDK_ROOT" --install \
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install \
             "platform-tools" \
             "platforms;android-35" \
             "build-tools;34.0.0" \
@@ -55,7 +41,6 @@ jobs:
           unzip -q Kubik_Prygun_Online_Build.zip -d extracted
 
           PROJECT=$(find extracted -name settings.gradle.kts -print -quit)
-
           if [ -z "$PROJECT" ]; then
             PROJECT=$(find extracted -name settings.gradle -print -quit)
           fi
@@ -66,7 +51,6 @@ jobs:
             exit 1
           fi
 
-          echo "Найден проект: $PROJECT"
           echo "PROJECT_DIR=$(dirname "$PROJECT")" >> "$GITHUB_ENV"
 
       - name: Установить Gradle
@@ -83,13 +67,13 @@ jobs:
           APK=$(find app/build/outputs/apk/debug -name "*.apk" -print -quit)
 
           if [ -z "$APK" ]; then
-            echo "ОШИБКА: APK не создан"
+            echo "APK не создан"
             exit 1
           fi
 
           cp "$APK" "$GITHUB_WORKSPACE/Kubik-Prygun.apk"
 
-      - name: Загрузить готовую игру
+      - name: Загрузить APK
         uses: actions/upload-artifact@v4
         with:
           name: Kubik-Prygun-APK
