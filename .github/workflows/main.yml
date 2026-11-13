@@ -1,3 +1,4 @@
+
 name: Сборка Кубик Прыгун APK
 
 on:
@@ -21,22 +22,52 @@ jobs:
           java-version: '17'
 
       - name: Настроить Android SDK
+        shell: bash
         run: |
-          echo "ANDROID_HOME=$ANDROID_HOME" >> "$GITHUB_ENV"
-          echo "ANDROID_SDK_ROOT=$ANDROID_HOME" >> "$GITHUB_ENV"
-          yes | sdkmanager --licenses
-          sdkmanager --install "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+          SDK_ROOT="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          SDKMANAGER="$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
 
-      - name: Распаковать проект
+          if [ ! -f "$SDKMANAGER" ]; then
+            echo "Ищу sdkmanager..."
+            SDKMANAGER=$(find /usr/local/lib/android /opt/android-sdk -name sdkmanager -type f 2>/dev/null | head -n 1)
+          fi
+
+          if [ -z "$SDKMANAGER" ] || [ ! -f "$SDKMANAGER" ]; then
+            echo "ОШИБКА: sdkmanager не найден"
+            exit 1
+          fi
+
+          echo "Найден: $SDKMANAGER"
+
+          SDK_ROOT="$(dirname "$(dirname "$(dirname "$SDKMANAGER")")")"
+
+          echo "ANDROID_HOME=$SDK_ROOT" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$SDK_ROOT" >> "$GITHUB_ENV"
+          echo "$SDK_ROOT/platform-tools" >> "$GITHUB_PATH"
+          echo "$(dirname "$SDKMANAGER")" >> "$GITHUB_PATH"
+
+          yes | "$SDKMANAGER" --licenses || true
+          "$SDKMANAGER" --install "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Распаковать Android-проект
+        shell: bash
         run: |
           mkdir -p extracted
           unzip -q Kubik_Prygun_Online_Build.zip -d extracted
+
           PROJECT=$(find extracted -name settings.gradle.kts -print -quit)
+
           if [ -z "$PROJECT" ]; then
-            echo "ОШИБКА: в ZIP не найден Android-проект"
+            PROJECT=$(find extracted -name settings.gradle -print -quit)
+          fi
+
+          if [ -z "$PROJECT" ]; then
+            echo "ОШИБКА: Android-проект не найден в ZIP"
             find extracted -maxdepth 4 -type f | head -50
             exit 1
           fi
+
+          echo "Найден проект: $PROJECT"
           echo "PROJECT_DIR=$(dirname "$PROJECT")" >> "$GITHUB_ENV"
 
       - name: Установить Gradle
@@ -45,12 +76,21 @@ jobs:
           gradle-version: '8.9'
 
       - name: Собрать APK
+        shell: bash
         run: |
           cd "$PROJECT_DIR"
           gradle assembleDebug
-          cp app/build/outputs/apk/debug/app-debug.apk "$GITHUB_WORKSPACE/Kubik-Prygun.apk"
 
-      - name: Загрузить APK
+          APK=$(find app/build/outputs/apk/debug -name "*.apk" -print -quit)
+
+          if [ -z "$APK" ]; then
+            echo "ОШИБКА: APK не создан"
+            exit 1
+          fi
+
+          cp "$APK" "$GITHUB_WORKSPACE/Kubik-Prygun.apk"
+
+      - name: Загрузить готовую игру
         uses: actions/upload-artifact@v4
         with:
           name: Kubik-Prygun-APK
