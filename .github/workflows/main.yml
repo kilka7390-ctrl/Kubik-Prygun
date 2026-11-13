@@ -1,89 +1,43 @@
 
-name: Сборка Кубик Прыгун APK
-
-on:
-  workflow_dispatch:
-  push:
-    branches:
-      - main
-
-jobs:
-  build:
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Скачать репозиторий
-        uses: actions/checkout@v4
-
-      - name: Установить Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '17'
-
-      - name: Найти Android SDK
-        run: |
-          echo "ANDROID_SDK_ROOT=$ANDROID_HOME" >> "$GITHUB_ENV"
-
-          SDKMANAGER=$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager 2>/dev/null | head -1)
-
-          if [ -z "$SDKMANAGER" ]; then
-            echo "ОШИБКА: sdkmanager не найден!"
-            echo "Содержимое Android SDK:"
-            ls -la "$ANDROID_HOME"
-            find "$ANDROID_HOME" -maxdepth 5 -type f | head -100
-            exit 1
-          fi
-
-          echo "SDKMANAGER=$SDKMANAGER" >> "$GITHUB_ENV"
-          echo "$(dirname "$SDKMANAGER")" >> "$GITHUB_PATH"
-          echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
-
-      - name: Установить компоненты Android SDK
-        run: |
-          yes | "$SDKMANAGER" --licenses || true
-
-          "$SDKMANAGER" --install \
-            "platform-tools" \
-            "platforms;android-35" \
-            "build-tools;35.0.0"
-
-      - name: Распаковать Android-проект
-        run: |
-          mkdir -p extracted
-
-          unzip -q Kubik_Prygun_Online_Build.zip -d extracted
-
-          PROJECT=$(find extracted -name settings.gradle.kts -print -quit)
-
-          if [ -z "$PROJECT" ]; then
-            echo "ОШИБКА: settings.gradle.kts не найден!"
-            echo "Файлы архива:"
-            find extracted -maxdepth 5 -type f | head -100
-            exit 1
-          fi
-
-          echo "PROJECT_DIR=$(dirname "$PROJECT")" >> "$GITHUB_ENV"
-
-          echo "Найден проект: $(dirname "$PROJECT")"
-
-      - name: Установить Gradle
-        uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: '8.9'
-
       - name: Собрать APK
         run: |
           cd "$PROJECT_DIR"
+
+          BUILD_FILE="app/build.gradle.kts"
+
+          if [ ! -f "$BUILD_FILE" ]; then
+            echo "ОШИБКА: app/build.gradle.kts не найден"
+            exit 1
+          fi
+
+          python3 - <<'PY'
+          from pathlib import Path
+
+          p = Path("app/build.gradle.kts")
+          s = p.read_text()
+
+          block = """
+          android {
+              compileOptions {
+                  sourceCompatibility = JavaVersion.VERSION_17
+                  targetCompatibility = JavaVersion.VERSION_17
+              }
+          }
+
+          tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
+              kotlinOptions {
+                  jvmTarget = "17"
+              }
+          }
+          """
+
+          if "sourceCompatibility = JavaVersion.VERSION_17" not in s:
+              s += "\n" + block
+
+          p.write_text(s)
+          PY
 
           gradle assembleDebug
 
           cp app/build/outputs/apk/debug/app-debug.apk \
             "$GITHUB_WORKSPACE/Kubik-Prygun.apk"
-
-      - name: Загрузить готовую игру
-        uses: actions/upload-artifact@v4
-        with:
-          name: Kubik-Prygun-APK
-          path: Kubik-Prygun.apk
-          if-no-files-found: error
