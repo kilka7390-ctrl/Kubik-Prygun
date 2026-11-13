@@ -9,27 +9,36 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Скачать файлы
+        uses: actions/checkout@v4
 
-      - name: Распаковать игру
-        run: |
-          unzip -q Kubik_Prygun_Online_Build.zip -d extracted
-          ROOT=$(find extracted -name settings.gradle.kts -printf '%h\n' | head -n 1)
-          if [ -z "$ROOT" ]; then
-            echo "Не найден Android-проект в архиве"
-            exit 1
-          fi
-          echo "PROJECT_DIR=$ROOT" >> "$GITHUB_ENV"
-
-      - uses: actions/setup-java@v4
+      - name: Установить Java
+        uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
 
-      - uses: android-actions/setup-android@v3
+      - name: Найти Android проект
+        run: |
+          mkdir extracted
+          unzip -q Kubik_Prygun_Online_Build.zip -d extracted
+          PROJECT=$(find extracted -name settings.gradle.kts -print -quit)
+          if [ -z "$PROJECT" ]; then
+            echo "Android проект не найден!"
+            exit 1
+          fi
+          echo "PROJECT_DIR=$(dirname "$PROJECT")" >> "$GITHUB_ENV"
 
-      - uses: gradle/actions/setup-gradle@v4
+      - name: Подготовить Android SDK
+        run: |
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          yes | sdkmanager --licenses || true
+          sdkmanager "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Установить Gradle
+        uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
 
@@ -37,9 +46,10 @@ jobs:
         run: |
           cd "$PROJECT_DIR"
           gradle assembleDebug
-          cp app/build/outputs/apk/debug/app-debug.apk "$GITHUB_WORKSPACE/Kubik-Prygun.apk"
+          cp app/build/outputs/apk/debug/app-debug.apk "$GITHUB_WORKSPACE/Кубик-Прыгун.apk"
 
-      - uses: actions/upload-artifact@v4
+      - name: Скачать готовую игру
+        uses: actions/upload-artifact@v4
         with:
-          name: Kubik-Prygun-APK
-          path: Kubik-Prygun.apk
+          name: Кубик-Прыгун-APK
+          path: Кубик-Прыгун.apk
