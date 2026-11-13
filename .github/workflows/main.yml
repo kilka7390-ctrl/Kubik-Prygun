@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Скачать файлы репозитория
+      - name: Скачать файлы
         uses: actions/checkout@v4
 
       - name: Установить Java
@@ -21,23 +21,24 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Распаковать Android-проект
+      - name: Настроить Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Установить Android платформу
         run: |
-          mkdir extracted
+          sdkmanager --install "platforms;android-35" "build-tools;35.0.0"
+          yes | sdkmanager --licenses || true
+
+      - name: Распаковать проект
+        run: |
+          mkdir -p extracted
           unzip -q Kubik_Prygun_Online_Build.zip -d extracted
           PROJECT=$(find extracted -name settings.gradle.kts -print -quit)
           if [ -z "$PROJECT" ]; then
-            echo "ОШИБКА: в ZIP не найден Android-проект с settings.gradle.kts"
-            echo "Проверь содержимое Kubik_Prygun_Online_Build.zip"
+            echo "ОШИБКА: settings.gradle.kts не найден в ZIP"
             exit 1
           fi
           echo "PROJECT_DIR=$(dirname "$PROJECT")" >> "$GITHUB_ENV"
-
-      - name: Настроить Android SDK
-        uses: android-actions/setup-android@v3
-        with:
-          api-level: 35
-          build-tools: 35.0.0
 
       - name: Установить Gradle
         uses: gradle/actions/setup-gradle@v4
@@ -50,7 +51,7 @@ jobs:
           gradle assembleDebug
           cp app/build/outputs/apk/debug/app-debug.apk "$GITHUB_WORKSPACE/Кубик-Прыгун.apk"
 
-      - name: Сохранить готовую игру
+      - name: Сохранить APK
         uses: actions/upload-artifact@v4
         with:
           name: Кубик-Прыгун-APK
