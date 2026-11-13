@@ -28,7 +28,6 @@ jobs:
           SDKMANAGER="$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
 
           if [ ! -f "$SDKMANAGER" ]; then
-            echo "Ищу sdkmanager..."
             SDKMANAGER=$(find /usr/local/lib/android /opt/android-sdk -name sdkmanager -type f 2>/dev/null | head -n 1)
           fi
 
@@ -37,8 +36,7 @@ jobs:
             exit 1
           fi
 
-          echo "Найден: $SDKMANAGER"
-
+          echo "Найден sdkmanager: $SDKMANAGER"
           SDK_ROOT="$(dirname "$(dirname "$(dirname "$SDKMANAGER")")")"
 
           echo "ANDROID_HOME=$SDK_ROOT" >> "$GITHUB_ENV"
@@ -63,7 +61,7 @@ jobs:
 
           if [ -z "$PROJECT" ]; then
             echo "ОШИБКА: Android-проект не найден в ZIP"
-            find extracted -maxdepth 4 -type f | head -50
+            find extracted -maxdepth 5 -type f | head -80
             exit 1
           fi
 
@@ -79,12 +77,12 @@ jobs:
         shell: bash
         run: |
           cd "$PROJECT_DIR"
-          gradle assembleDebug
+          gradle assembleDebug --stacktrace --info --no-daemon
 
           APK=$(find app/build/outputs/apk/debug -name "*.apk" -print -quit)
 
           if [ -z "$APK" ]; then
-            echo "ОШИБКА: APK не создан"
+            echo "ОШИБКА: APK не найден"
             exit 1
           fi
 
