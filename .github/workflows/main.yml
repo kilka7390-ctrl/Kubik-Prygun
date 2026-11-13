@@ -25,21 +25,21 @@ jobs:
         uses: android-actions/setup-android@v3
         with:
           cmdline-tools-version: latest
-          accept-android-sdk-licenses: true
 
-      - name: Установить компоненты Android
+      - name: Установить компоненты Android SDK
         run: |
+          yes | sdkmanager --licenses
+          sdkmanager --install "platform-tools"
           sdkmanager --install "platforms;android-35"
           sdkmanager --install "build-tools;35.0.0"
-          sdkmanager --licenses
 
-      - name: Распаковать проект
+      - name: Распаковать Android-проект
         run: |
           mkdir -p extracted
           unzip -q Kubik_Prygun_Online_Build.zip -d extracted
           PROJECT=$(find extracted -name settings.gradle.kts -print -quit)
           if [ -z "$PROJECT" ]; then
-            echo "ОШИБКА: Android-проект не найден в ZIP"
+            echo "ОШИБКА: settings.gradle.kts не найден!"
             find extracted -maxdepth 4 -type f | head -50
             exit 1
           fi
@@ -50,14 +50,15 @@ jobs:
         with:
           gradle-version: '8.9'
 
-      - name: Собрать игру
+      - name: Собрать APK
         run: |
           cd "$PROJECT_DIR"
           gradle assembleDebug
           cp app/build/outputs/apk/debug/app-debug.apk "$GITHUB_WORKSPACE/Kubik-Prygun.apk"
 
-      - name: Загрузить APK
+      - name: Загрузить готовую игру
         uses: actions/upload-artifact@v4
         with:
           name: Kubik-Prygun-APK
           path: Kubik-Prygun.apk
+          if-no-files-found: error
