@@ -1,22 +1,91 @@
 
-      - name: Собрать APK
+name: Kubik Prygun APK Build
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Find Android SDK
+        shell: bash
         run: |
-          cd "$PROJECT_DIR"
+          echo "ANDROID_SDK_ROOT=$ANDROID_HOME" >> "$GITHUB_ENV"
 
-          BUILD_FILE="app/build.gradle.kts"
+          SDKMANAGER=$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager 2>/dev/null | head -1)
 
-          if [ ! -f "$BUILD_FILE" ]; then
-            echo "ОШИБКА: app/build.gradle.kts не найден"
+          if [ -z "$SDKMANAGER" ]; then
+            echo "sdkmanager not found"
+            find "$ANDROID_HOME" -name sdkmanager
             exit 1
           fi
+
+          echo "SDKMANAGER=$SDKMANAGER" >> "$GITHUB_ENV"
+          echo "$(dirname "$SDKMANAGER")" >> "$GITHUB_PATH"
+          echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
+
+      - name: Install Android SDK packages
+        shell: bash
+        run: |
+          yes | "$SDKMANAGER" --licenses || true
+
+          "$SDKMANAGER" --install \
+            "platform-tools" \
+            "platforms;android-35" \
+            "build-tools;35.0.0"
+
+      - name: Extract project
+        shell: bash
+        run: |
+          mkdir -p extracted
+          unzip -q Kubik_Prygun_Online_Build.zip -d extracted
+
+          PROJECT=$(find extracted -name settings.gradle.kts -print -quit)
+
+          if [ -z "$PROJECT" ]; then
+            echo "settings.gradle.kts not found"
+            find extracted -maxdepth 5 -type f | head -100
+            exit 1
+          fi
+
+          echo "PROJECT_DIR=$(dirname "$PROJECT")" >> "$GITHUB_ENV"
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Build APK
+        shell: bash
+        run: |
+          cd "$PROJECT_DIR"
 
           python3 - <<'PY'
           from pathlib import Path
 
           p = Path("app/build.gradle.kts")
+
+          if not p.exists():
+              raise SystemExit("app/build.gradle.kts not found")
+
           s = p.read_text()
 
           block = """
+          
           android {
               compileOptions {
                   sourceCompatibility = JavaVersion.VERSION_17
@@ -32,12 +101,17 @@
           """
 
           if "sourceCompatibility = JavaVersion.VERSION_17" not in s:
-              s += "\n" + block
-
-          p.write_text(s)
+              p.write_text(s + block)
           PY
 
           gradle assembleDebug
 
           cp app/build/outputs/apk/debug/app-debug.apk \
             "$GITHUB_WORKSPACE/Kubik-Prygun.apk"
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Kubik-Prygun-APK
+          path: Kubik-Prygun.apk
+          if-no-files-found: error
